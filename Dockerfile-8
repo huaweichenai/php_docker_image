@@ -1,0 +1,71 @@
+FROM php:8-fpm
+
+# 安装系统包和PHP扩展(此处以Yii 2.0 Framework所需为例)
+COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
+RUN install-php-extensions \
+    soap \
+    zip \
+    curl \
+    bcmath \
+    exif \
+    gd \
+    iconv \
+    intl \
+    mbstring \
+    opcache \
+    pcntl \
+    posix \
+    pdo_mysql \
+    pdo_pgsql \
+    imagick \
+    decimal \
+    memcached \
+    redis \
+    mongodb \
+    swoole
+
+# 安装相关系统软件服务
+RUN apt-get update \
+    && apt-get install -y --force-yes \
+        cron \
+        supervisor \
+        procps \
+    --no-install-recommends && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# 设置时区
+ENV TIME_ZONE Asia/Shanghai
+# ENV TIME_ZONE UTC
+RUN echo "${TIME_ZONE}" > /etc/timezone \
+    && ln -sf /usr/share/zoneinfo/${TIME_ZONE} /etc/localtime
+
+# 设置系统编码
+ENV LANG C.UTF-8
+ENV LC_ALL C.UTF-8
+
+# 允许Composer作为root运行
+ENV COMPOSER_ALLOW_SUPERUSER 1
+
+# 安装Composer
+COPY ./config/usr.local.bin/composer /usr/local/bin/composer
+RUN chmod 755 /usr/local/bin/composer
+RUN curl -sS https://getcomposer.org/installer | php -- \
+        --version=2.5.4 \
+        --filename=composer.phar \
+        --install-dir=/usr/local/bin && \
+    composer clear-cache
+
+COPY ./config/php-fpm.conf /usr/local/etc/php-fpm.conf
+COPY ./config/conf.d/ /usr/local/etc/php/conf.d/
+
+# (Debian only) Change www-data user ID
+# ENV PHP_USER_ID 1000
+# RUN set -x \
+#     && deluser www-data \
+#     && addgroup -g ${PHP_USER_ID} -S www-data \
+#     && adduser -u ${PHP_USER_ID} -D -S -G www-data www-data
+
+WORKDIR /opt/htdocs
+
+EXPOSE 9000
